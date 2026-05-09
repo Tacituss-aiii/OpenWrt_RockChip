@@ -17,7 +17,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Check out the project branch
@@ -25,17 +25,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Free Disk Space (The "Space-Maker")
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+
       - name: Initialize Environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo -E apt-get -qq update
-          sudo -E apt-get -qq install -y software-properties-common
-          sudo -E add-apt-repository ppa:ubuntu-toolchain-r/test -y
-          sudo -E apt-get -qq update
-          sudo -E apt-get -qq install -y gcc-13 g++-13 ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-pyelftools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
-          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100
-          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100
+          sudo -E apt-get -qq install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-pyelftools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
           sudo timedatectl set-timezone "$TZ"
 
       - name: Download firmware source code
@@ -48,19 +49,15 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Load feeds.conf.default
+      - name: Load DIY Scripts
         run: |
           chmod +x $OPENWRT_NAME/*.sh
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P1_SH
-
-      - name: Load config
-        run: |
-          [ -e "$CONFIG_FILE" ] && cat "$CONFIG_FILE" > openwrt/.config
-          chmod +x $OPENWRT_NAME/*.sh && cd openwrt
+          [ -e "../$CONFIG_FILE" ] && cat "../$CONFIG_FILE" > .config
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
-      - name: Download the installation package
+      - name: Download packages
         id: package
         run: |
           cd openwrt
@@ -74,38 +71,38 @@ jobs:
         run: |
           cd openwrt
           echo -e "$(nproc) thread compile"
-          make -j$(nproc) || make -j1 || make -j1 V=s
+          make -j$(nproc) || make -j1 V=s
           echo "date1=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
           echo "date2=$(date "+%Y年%m月%d日")" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Organize and Rename Files
+      - name: Organize Files
         id: organize
-        if: ${{ env.UPLOAD_FIRMWARE == 'true' && !cancelled() }}
+        if: steps.compile.outputs.status == 'success' && !cancelled()
         run: |
           cd openwrt/bin/targets/*/*
           rm -rf packages *.buildinfo *.manifest *.json || true
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload the firmware to github
+      - name: Upload Artifact
         uses: actions/upload-artifact@main
         if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
           name: ${{ env.date1 }}_${{ env.OPENWRT_NAME }}_${{ env.OPENWRT_NAME1 }}
           path: ${{ env.FIRMWARE }}
 
-      - name: Generate release tags
+      - name: Generate Release Tag
         id: tag
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         run: |
-          echo "release_tag=${{ env.date2 }}" >> $GITHUB_OUTPUT
+          echo "release_tag=${{ env.date2 }}_R4S" >> $GITHUB_OUTPUT
           touch release.txt
-          echo "📥 固件下载" >> release.txt
+          echo "📥 ImmortalWrt RockChip 固件已生成" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Publish to release
-        uses: softprops/action-gh-release@v1
+      - name: Publish to Release
+        uses: softprops/action-gh-release@v2
         if: steps.tag.outputs.status == 'success' && !cancelled()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
