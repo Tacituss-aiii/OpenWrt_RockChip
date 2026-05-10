@@ -71,7 +71,8 @@ jobs:
         run: |
           cd openwrt
           echo -e "$(nproc) thread compile"
-          make -j$(nproc) || make -j1 V=s
+          # 取消了 fallback 到单线程的逻辑，强制多线程并输出详细错误
+          make -j$(nproc) V=s
           echo "date1=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
           echo "date2=$(date "+%Y年%m月%d日")" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
