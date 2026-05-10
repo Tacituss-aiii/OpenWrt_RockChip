@@ -17,19 +17,22 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Check out the project branch
         uses: actions/checkout@main
-        with:
-          fetch-depth: 0
 
-      - name: Free Disk Space (The "Space-Maker")
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
-          sudo -E apt-get -qq autoremove --purge
-          sudo -E apt-get -qq clean
+      - name: Free Disk Space (Aggressive)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
 
       - name: Initialize Environment
         env:
@@ -38,6 +41,7 @@ jobs:
           sudo -E apt-get -qq update
           sudo -E apt-get -qq install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-pyelftools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
           sudo timedatectl set-timezone "$TZ"
+          df -h
 
       - name: Download firmware source code
         run: |
@@ -51,7 +55,8 @@ jobs:
 
       - name: Load DIY Scripts
         run: |
-          chmod +x $OPENWRT_NAME/*.sh
+          chmod +x $OPENWRT_NAME/*.sh || true
+          chmod +x $DIY_P1_SH $DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P1_SH
           [ -e "../$CONFIG_FILE" ] && cat "../$CONFIG_FILE" > .config
@@ -71,11 +76,11 @@ jobs:
         run: |
           cd openwrt
           echo -e "$(nproc) thread compile"
-          # 取消了 fallback 到单线程的逻辑，强制多线程并输出详细错误
-          make -j$(nproc) V=s
+          make -j$(nproc) || make -j1 || make -j1 V=s
           echo "date1=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
           echo "date2=$(date "+%Y年%m月%d日")" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
+          df -h
 
       - name: Organize Files
         id: organize
@@ -87,10 +92,10 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
-          name: ${{ env.date1 }}_${{ env.OPENWRT_NAME }}_${{ env.OPENWRT_NAME1 }}
+          name: ${{ env.date1 }}_${{ env.OPENWRT_NAME }}_${{ env.OPENWRT_NAME1 }}_R4S
           path: ${{ env.FIRMWARE }}
 
       - name: Generate Release Tag
@@ -99,7 +104,7 @@ jobs:
         run: |
           echo "release_tag=${{ env.date2 }}_R4S" >> $GITHUB_OUTPUT
           touch release.txt
-          echo "📥 ImmortalWrt RockChip 固件已生成" >> release.txt
+          echo "📥 ImmortalWrt RockChip R4S 固件" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Publish to Release
